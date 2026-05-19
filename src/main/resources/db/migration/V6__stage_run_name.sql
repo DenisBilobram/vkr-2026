@@ -1,0 +1,2 @@
+ALTER TABLE stage_run
+    ADD COLUMN IF NOT EXISTS stage_name VARCHAR(128);

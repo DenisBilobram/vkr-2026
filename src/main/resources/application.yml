@@ -1,0 +1,147 @@
+server:
+  servlet:
+    context-path: /
+  port: 8080
+
+tracer-client:
+  url: "https://nda.example.invalid"
+  connect-timeout-seconds: 3
+  request-timeout-seconds: 10
+  service-refresh-token: "${TRACER_API_TOKEN:}"
+
+spring:
+  application:
+    name: discovery-portal-flow
+  config:
+    import:
+      - "optional:classpath:flow-definition.yml"
+      - "optional:file:./application-local.yml"
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false
+  data:
+    jdbc:
+      dialect: POSTGRESQL
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/discovery_portal_flow?stringtype=unspecified}
+    username: ${SPRING_DATASOURCE_USERNAME:app}
+    password: ${SPRING_DATASOURCE_PASSWORD:app_password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      data-source-properties:
+        prepareThreshold: 0
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+app:
+  name: ${spring.application.name}
+  var.dir: ${APP_VAR_DIR:./var}
+
+log.output.dir: ${LOG_OUTPUT_DIR:./logs}
+etc:
+  common.dir: ${APP_ETC_COMMON_DIR:./etc}
+  dir: ${APP_ETC_DIR:./etc/discovery-portal-flow}
+
+pms:
+  host: "nda.example.invalid"
+  namespace: "public"
+  force-overwrite: false
+  apptracer-upload-uri: "https://nda.example.invalid"
+  tls-key-store-path: ""
+  tls-key-store-password: ""
+  tls-key-store-type: "PKCS12"
+
+onecloud:
+  datacenter-base-url-template: "https://onecloud-%s.nda.example.invalid/api"
+  namespace: "public"
+  connect-timeout-ms: 5000
+  request-timeout-ms: 30000
+  tls-key-store-path: ""
+  tls-key-store-password: ""
+  tls-key-store-type: "PKCS12"
+  tls-trusted-certificate-paths: []
+
+gitlab:
+  token: "${GITLAB_TOKEN:}"
+  repository-project-id: 0
+  gitlab-url: "https://gitlab.example.invalid"
+  ai-namespace-id: 0
+
+toggles:
+  webhook-token: "${TOGGLES_WEBHOOK_TOKEN:}"
+  online-golden-source-tenant-project-id: 0
+  offline-golden-source-tenant-project-id: 0
+  toggles-base-url: "https://toggles.nda.example.invalid"
+  zeus-roles-json-path: "roles.json"
+  jira-task-role-creation: "NDA-0"
+
+hermes:
+  prod-server-api-address: "hermes-prod.nda.example.invalid:82"
+  testing-server-api-address: "hermes-test.nda.example.invalid:82"
+
+onesecret:
+  base-url: "https://onesecret.nda.example.invalid"
+  token: "${ONE_SECRET_TOKEN:}"
+  request-timeout-ms: 10000
+  tls-certificate-path: ""
+
+mdb:
+  base-url: "https://mdb.nda.example.invalid"
+  token: "${MDB_TOKEN:}"
+  cluster-id: "00000000-0000-0000-0000-000000000000"
+  user-role: "readWrite"
+  connect-timeout-seconds: 5
+  request-timeout-seconds: 30
+  operation-poll-delay-millis: 3000
+  operation-timeout-seconds: 300
+
+servicehost:
+  admin:
+    base-url: "https://servicehost.nda.example.invalid/api/v1/projects"
+    project: "public"
+    request-timeout-ms: 30000
+
+teamcity:
+  token: "${TEAMCITY_TOKEN:}"
+
+vkteams:
+  client:
+    base-url: "https://messenger.nda.example.invalid/bot/v1"
+    timeout: 30s
+    connect-timeout: 10s
+  task:
+    max-users-add-allowed: 7
+    are-chats-public: true
+    mandatory-users-to-add: []
+
+management:
+  server:
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics,info,env,configprops,beans,conditions
+      base-path: /actuator
+  endpoint:
+    prometheus:
+      access: read_only
+    health:
+      access: read_only
+    info:
+      access: read_only
+    metrics:
+      access: read_only
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+admin.port: ${management.server.port}
+
+springdoc:
+  paths-to-match: /api/**, /flow/**
+  swagger-ui:
+    path: /swagger-ui
+  api-docs:
+    path: /v3/api-docs

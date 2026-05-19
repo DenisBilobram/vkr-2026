@@ -1,0 +1,15 @@
+.gradle/
+build/
+out/
+
+.idea/
+*.iml
+
+.DS_Store
+Thumbs.db
+
+application-local.yml
+application-local-secret.yml
+src/main/resources/application-local-secret.yml
+
+*.log

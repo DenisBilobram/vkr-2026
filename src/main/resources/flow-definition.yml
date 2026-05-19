@@ -1,0 +1,653 @@
+flow:
+  pipeline-definitions:
+    - pipeline-name: VerticalRuntimeGeneration
+      children-type: pipeline
+      pipelines:
+        - pipeline-name: ServicesInfrastructureSetup
+          children-type: stage
+          stages:
+            - stage-name: appTracerProjectSetting
+            - stage-name: releaseChatsSetting
+            - stage-name: oneSecretSetting
+              bootstrap-task: bootstrapOneSecretContext
+              dependency-stages: [ "appTracerProjectSetting" ]
+            - stage-name: pmsSetting
+              bootstrap-task: bootstrapRuntimeContext
+              dependency-stages: [ "oneSecretSetting" ]
+
+        - pipeline-name: RecomInfrastructureSetup
+          dependency-pipelines: [ "ServicesInfrastructureSetup" ]
+          children-type: stage
+          stages:
+            - stage-name: mdbMongoSettings
+              bootstrap-task: bootstrapSnapshotsBuilderMongoDbContext
+            - stage-name: dictionaryProjectSetting
+              bootstrap-task: bootstrapOcsContext
+            - stage-name: ytMockTablesSetting
+              bootstrap-task: bootstrapYtMockTablesContext
+            - stage-name: servicehostSetting
+              bootstrap-task: bootstrapRuntimeContext
+
+        - pipeline-name: ServicesSetup
+          dependency-pipelines: [ "RecomInfrastructureSetup" ]
+          children-type: stage
+          stages:
+            - stage-name: servicesGeneration
+              bootstrap-task: bootstrapRuntimeContext
+            - stage-name: servicesOnecloudDeployment
+              bootstrap-task: bootstrapOnecloudDeploymentContext
+              dependency-stages: [ "servicesGeneration" ]
+
+        - pipeline-name: TogglesSetup
+          dependency-pipelines: [ "ServicesSetup" ]
+          children-type: pipeline
+          pipelines:
+            - pipeline-name: TogglesOnlineTenantSetup
+              children-type: stage
+              stages:
+                - stage-name: TogglesOnlineTenantCreate
+                  bootstrap-task: bootstrapOnlineTogglesContext
+                - stage-name: TogglesOnlineTenantUpdate
+                  bootstrap-task: bootstrapOnlineTogglesContext
+                  dependency-stages: [ "TogglesOnlineTenantCreate" ]
+
+            - pipeline-name: TogglesOfflineTenantSetup
+              dependency-pipelines: [ "TogglesOnlineTenantSetup" ]
+              children-type: stage
+              stages:
+                - stage-name: TogglesOfflineTenantCreate
+                  bootstrap-task: bootstrapOfflineTogglesContext
+                - stage-name: TogglesOfflineTenantUpdate
+                  bootstrap-task: bootstrapOfflineTogglesContext
+                  dependency-stages: [ "TogglesOfflineTenantCreate" ]
+
+        - pipeline-name: SnapshotsIntegration
+          dependency-pipelines: [ "TogglesSetup" ]
+          children-type: stage
+          stages:
+            - stage-name: hermesSnaphotsSettings
+              bootstrap-task: bootstrapHermesSnapshotCopyContext
+            - stage-name: hermerSnapshotsSync
+              dependency-stages: [ "hermesSnaphotsSettings" ]
+
+    - pipeline-name: VerticalRegistryFill
+      public: true
+      children-type: stage
+      stages:
+        - stage-name: verticalRegistryFill
+          bootstrap-task: bootstrapRuntimeContext
+
+    - pipeline-name: ProjectRegistryFill
+      public: true
+      children-type: stage
+      stages:
+        - stage-name: projectRegistryFill
+          bootstrap-task: bootstrapProjectRecomRuntimeContext
+
+  stage-definitions:
+    - stage-name: appTracerProjectSetting
+      task-definitions:
+        - task-name: createAppTracerProjectTask
+          task-bean: createAppTracerProjectTask
+          timeout: 5m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: true
+            backoff: 30s
+            attempts: 3
+    - stage-name: releaseChatsSetting
+      task-definitions:
+        - task-name: createVkTeamsChatTask
+          task-bean: createVkTeamsChatTask
+          timeout: 3m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: true
+
+    - stage-name: projectRegistryFill
+      task-definitions:
+        - task-name: fillProjectRegistry
+          task-bean: fillProjectRegistryTask
+          timeout: 5m
+          dependency-tasks: [ ]
+          retry-policy:
+            auto-retry-enabled: false
+
+    - stage-name: verticalRegistryFill
+      task-definitions:
+        - task-name: fillVerticalRegistry
+          task-bean: fillVerticalRegistryTask
+          timeout: 5m
+          dependency-tasks: [ ]
+          retry-policy:
+            auto-retry-enabled: false
+    - stage-name: pmsSetting
+      task-definitions:
+        - task-name: servicePmsSubmitTask
+          task-bean: servicePmsSubmitTask
+          timeout: 15m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+            backoff: 30s
+            attempts: 3
+
+    - stage-name: oneSecretSetting
+      task-definitions:
+        - task-name: createProjectSecretTask
+          task-bean: createProjectSecretTask
+          timeout: 10m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createVerticalSecretTask
+          task-bean: createVerticalSecretTask
+          timeout: 10m
+          dependency-tasks: ["createProjectSecretTask"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createServiceSecretTask
+          task-bean: createServiceSecretTask
+          timeout: 10m
+          dependency-tasks: ["createVerticalSecretTask"]
+          retry-policy:
+            auto-retry-enabled: false
+
+    - stage-name: mdbMongoSettings
+      task-definitions:
+        - task-name: createMongoDatabaseForSnapshotsBuilder
+          task-bean: createMongoDatabaseTask
+          timeout: 10m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: waitMdbDatabaseOperation
+          task-bean: waitMdbOperationTask
+          timeout: 10m
+          dependency-tasks: ["createMongoDatabaseForSnapshotsBuilder"]
+          waiting-policy:
+            waiting-task: true
+            delay: 3s
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: updateSecretWithMongoCredentials
+          task-bean: updateSecretValuesTask
+          timeout: 10m
+          dependency-tasks: ["waitMdbDatabaseOperation"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createMongoUserForSnapshotsBuilder
+          task-bean: createMongoUserTask
+          timeout: 10m
+          dependency-tasks: ["updateSecretWithMongoCredentials"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: waitMdbUserOperation
+          task-bean: waitMdbOperationTask
+          timeout: 10m
+          dependency-tasks: ["createMongoUserForSnapshotsBuilder"]
+          waiting-policy:
+            waiting-task: true
+            delay: 3s
+          retry-policy:
+            auto-retry-enabled: false
+
+    - stage-name: dictionaryProjectSetting
+      task-definitions:
+        - task-name: dictionaryProjectTask
+          task-bean: dictionaryProjectTask
+          timeout: 10m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+
+    - stage-name: ytMockTablesSetting
+      task-definitions:
+        - task-name: ytMockTablesTask
+          task-bean: ytMockTablesTask
+          timeout: 20m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+
+    - stage-name: servicesGeneration
+      task-definitions:
+        - task-name: serviceCodegenTask
+          task-bean: serviceCodegenTask
+          timeout: 10m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: commitCodegenFiles
+          task-bean: commitGitlabFilesTask
+          timeout: 5m
+          dependency-tasks: ["serviceCodegenTask"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createMRForCodegenFiles
+          task-bean: createGitlabMergeRequestTask
+          timeout: 2m
+          dependency-tasks: ["commitCodegenFiles"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: waitCodeReviewForCodegenMR
+          task-bean: waitGitlabMrApprovePipelineTask
+          timeout: 20m
+          dependency-tasks: ["createMRForCodegenFiles"]
+          waiting-policy:
+            waiting-task: true
+            delay: 10s
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: waitPipelineForCodegenMR
+          task-bean: waitGitlabMergeRequestPipelineTask
+          timeout: 20m
+          dependency-tasks: ["waitCodeReviewForCodegenMR"]
+          waiting-policy:
+            waiting-task: true
+            delay: 10s
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: mergeMRForCodegen
+          task-bean: mergeGitlabMergeRequestTask
+          timeout: 5m
+          dependency-tasks: ["waitPipelineForCodegenMR"]
+          retry-policy:
+            auto-retry-enabled: false
+
+    - stage-name: servicesOnecloudDeployment
+      task-definitions:
+        - task-name: teamcityProjectsTask
+          task-bean: teamcityProjectsTask
+          timeout: 10m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: waitTeamcityBuildTask
+          task-bean: waitTeamcityBuildTask
+          timeout: 20m
+          dependency-tasks: [ "teamcityProjectsTask" ]
+          waiting-policy:
+            waiting-task: true
+            delay: 10s
+          retry-policy:
+            auto-retry-enabled: true
+        - task-name: onecloudSubmitQueuesTask
+          task-bean: onecloudSubmitQueuesTask
+          timeout: 20m
+          dependency-tasks: [ "waitTeamcityBuildTask" ]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: onecloudSubmitStoragesTask
+          task-bean: onecloudSubmitStoragesTask
+          timeout: 20m
+          dependency-tasks: [ "onecloudSubmitQueuesTask" ]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: onecloudSubmitServicesTask
+          task-bean: onecloudSubmitServicesTask
+          timeout: 20m
+          dependency-tasks: [ "onecloudSubmitStoragesTask" ]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: onecloudWaitServicesCreatedTask
+          task-bean: onecloudWaitServicesCreatedTask
+          timeout: 20m
+          dependency-tasks: [ "onecloudSubmitServicesTask" ]
+          waiting-policy:
+            waiting-task: true
+            delay: 10s
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: onecloudWaitServicesRunningTask
+          task-bean: onecloudWaitServicesRunningTask
+          timeout: 40m
+          dependency-tasks: [ "onecloudWaitServicesCreatedTask" ]
+          waiting-policy:
+            waiting-task: true
+            delay: 10s
+          retry-policy:
+            auto-retry-enabled: false
+
+
+    - stage-name: TogglesOnlineTenantCreate
+      task-definitions:
+        - task-name: createTogglesTenantGitlabProject
+          task-bean: createGitlabProjectTask
+          execute-if: createTogglesTenantFlag
+          timeout: 5m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createDrillsProjectForTenant
+          task-bean: createDrillsProjectTask
+          execute-if: createTogglesTenantFlag
+          timeout: 5m
+          dependency-tasks: ["createTogglesTenantGitlabProject"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createTogglesTenantGitlabWebhook
+          task-bean: createGitlabWebhookTask
+          execute-if: createTogglesTenantFlag
+          timeout: 5m
+          dependency-tasks: ["createDrillsProjectForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createTogglesTenant
+          task-bean: registerTogglesTenantTask
+          execute-if: createTogglesTenantFlag
+          timeout: 10m
+          dependency-tasks: ["createTogglesTenantGitlabWebhook"]
+          retry-policy:
+            auto-retry-enabled: false
+
+    - stage-name: TogglesOnlineTenantUpdate
+      task-definitions:
+        - task-name: createConfigPatchForTenant
+          task-bean: createTogglesConfigPatchTask
+          timeout: 10m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: waitConfigPatchValidationForTenant
+          task-bean: waitTogglesConfigPatchValidationTask
+          timeout: 20m
+          dependency-tasks: ["createConfigPatchForTenant"]
+          waiting-policy:
+            waiting-task: true
+            delay: 10s
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: mergeConfigPatchForTenant
+          task-bean: mergeTogglesConfigPatchTask
+          timeout: 5m
+          dependency-tasks: ["waitConfigPatchValidationForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createReleaseForTenant
+          task-bean: createTogglesReleaseTask
+          timeout: 10m
+          dependency-tasks: ["mergeConfigPatchForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: resolveStoredVersionForTenant
+          task-bean: resolveTogglesStoredVersionTask
+          timeout: 5m
+          dependency-tasks: ["createReleaseForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: deployStoredVersionForTenant
+          task-bean: deployTogglesStoredVersionTask
+          timeout: 10m
+          dependency-tasks: ["resolveStoredVersionForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: prepareTenantRolesFiles
+          task-bean: prepareTogglesTenantRolesTask
+          execute-if: updateZeusRolesFlag
+          timeout: 5m
+          dependency-tasks: ["deployStoredVersionForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: commitTenantRolesFiles
+          task-bean: commitGitlabFilesTask
+          execute-if: updateZeusRolesFlag
+          timeout: 5m
+          dependency-tasks: ["prepareTenantRolesFiles"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createMRForTenantRoles
+          task-bean: createGitlabMergeRequestTask
+          execute-if: updateZeusRolesFlag
+          timeout: 2m
+          dependency-tasks: ["commitTenantRolesFiles"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: waitPipelineForTenantRolesMR
+          task-bean: waitGitlabMergeRequestPipelineTask
+          execute-if: updateZeusRolesFlag
+          timeout: 20m
+          dependency-tasks: ["createMRForTenantRoles"]
+          waiting-policy:
+            waiting-task: true
+            delay: 10s
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: mergeMRForTenantRoles
+          task-bean: mergeGitlabMergeRequestTask
+          execute-if: updateZeusRolesFlag
+          timeout: 5m
+          dependency-tasks: ["waitPipelineForTenantRolesMR"]
+          retry-policy:
+            auto-retry-enabled: false
+
+    - stage-name: TogglesOfflineTenantCreate
+      execute-if: createTogglesTenantFlag
+      task-definitions:
+        - task-name: createTogglesTenantGitlabProject
+          task-bean: createGitlabProjectTask
+          timeout: 5m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createDrillsProjectForTenant
+          task-bean: createDrillsProjectTask
+          timeout: 5m
+          dependency-tasks: ["createTogglesTenantGitlabProject"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createTogglesTenantGitlabWebhook
+          task-bean: createGitlabWebhookTask
+          timeout: 5m
+          dependency-tasks: ["createDrillsProjectForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createTogglesTenant
+          task-bean: registerTogglesTenantTask
+          timeout: 10m
+          dependency-tasks: ["createTogglesTenantGitlabWebhook"]
+          retry-policy:
+            auto-retry-enabled: false
+
+    - stage-name: TogglesOfflineTenantUpdate
+      task-definitions:
+        - task-name: createConfigPatchForTenant
+          task-bean: createTogglesConfigPatchTask
+          timeout: 10m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: waitConfigPatchValidationForTenant
+          task-bean: waitTogglesConfigPatchValidationTask
+          timeout: 20m
+          dependency-tasks: ["createConfigPatchForTenant"]
+          waiting-policy:
+            waiting-task: true
+            delay: 10s
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: mergeConfigPatchForTenant
+          task-bean: mergeTogglesConfigPatchTask
+          timeout: 5m
+          dependency-tasks: ["waitConfigPatchValidationForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createReleaseForTenant
+          task-bean: createTogglesReleaseTask
+          timeout: 10m
+          dependency-tasks: ["mergeConfigPatchForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: resolveStoredVersionForTenant
+          task-bean: resolveTogglesStoredVersionTask
+          timeout: 5m
+          dependency-tasks: ["createReleaseForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: deployStoredVersionForTenant
+          task-bean: deployTogglesStoredVersionTask
+          timeout: 10m
+          dependency-tasks: ["resolveStoredVersionForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: prepareTenantRolesFiles
+          task-bean: prepareTogglesTenantRolesTask
+          execute-if: updateZeusRolesFlag
+          timeout: 5m
+          dependency-tasks: ["deployStoredVersionForTenant"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: commitTenantRolesFiles
+          task-bean: commitGitlabFilesTask
+          execute-if: updateZeusRolesFlag
+          timeout: 5m
+          dependency-tasks: ["prepareTenantRolesFiles"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: createMRForTenantRoles
+          task-bean: createGitlabMergeRequestTask
+          execute-if: updateZeusRolesFlag
+          timeout: 2m
+          dependency-tasks: ["commitTenantRolesFiles"]
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: waitPipelineForTenantRolesMR
+          task-bean: waitGitlabMergeRequestPipelineTask
+          execute-if: updateZeusRolesFlag
+          timeout: 20m
+          dependency-tasks: ["createMRForTenantRoles"]
+          waiting-policy:
+            waiting-task: true
+            delay: 10s
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: mergeMRForTenantRoles
+          task-bean: mergeGitlabMergeRequestTask
+          execute-if: updateZeusRolesFlag
+          timeout: 5m
+          dependency-tasks: ["waitPipelineForTenantRolesMR"]
+          retry-policy:
+            auto-retry-enabled: false
+
+    - stage-name: hermesSnaphotsSettings
+      task-definitions:
+        - task-name: buildProdHermesSnapshots
+          task-bean: buildProdHermesSnapshotsTask
+          timeout: 10m
+          dependency-tasks: []
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: generateHermesGroupMappings
+          task-bean: generateHermesGroupMappingsTask
+          timeout: 10m
+          dependency-tasks: ["buildProdHermesSnapshots"]
+          retry-policy:
+            auto-retry-enabled: false
+
+    - stage-name: hermerSnapshotsSync
+      task-definitions:
+        - task-name: waitProdHermesSnapshots
+          task-bean: waitHermesProdSnapshotsTask
+          timeout: 60m
+          dependency-tasks: []
+          waiting-policy:
+            waiting-task: true
+            delay: 20s
+          retry-policy:
+            auto-retry-enabled: false
+        - task-name: copyProdHermesSnapshotsToTesting
+          task-bean: copyHermesSnapshotMetaTask
+          timeout: 10m
+          dependency-tasks: ["waitProdHermesSnapshots"]
+          retry-policy:
+            auto-retry-enabled: false
+    - stage-name: servicehostSetting
+      task-definitions:
+        - task-name: createServicehostClusterMR
+          task-bean: createServicehostClusterMR
+          timeout: 20m
+          retry-policy:
+            enabled: false
+        - task-name: createServicehostVerticalMR
+          task-bean: createServicehostVerticalMR
+          timeout: 40m
+          dependency-tasks: [ "createServicehostClusterMR" ]
+          retry-policy:
+            enabled: false
+        - task-name: createServicehostOfflineVerticalMR
+          task-bean: createServicehostOfflineVerticalMR
+          timeout: 40m
+          dependency-tasks: [ "createServicehostVerticalMR" ]
+          retry-policy:
+            enabled: false
+
+  bootstrap-task-definitions:
+    - task-name: bootstrapRuntimeContext
+      task-bean: bootstrapRuntimeContext
+      timeout: 5m
+      dependency-tasks: []
+      retry-policy:
+        auto-retry-enabled: false
+
+    - task-name: bootstrapOnecloudDeploymentContext
+      task-bean: bootstrapOnecloudDeploymentContext
+      timeout: 5m
+      dependency-tasks: []
+      retry-policy:
+        auto-retry-enabled: false
+
+    - task-name: bootstrapProjectRecomRuntimeContext
+      task-bean: bootstrapProjectRecomRuntimeContext
+      timeout: 5m
+      dependency-tasks: []
+      retry-policy:
+        auto-retry-enabled: false
+
+    - task-name: bootstrapOneSecretContext
+      task-bean: bootstrapOneSecretContext
+      timeout: 5m
+      dependency-tasks: []
+      retry-policy:
+        auto-retry-enabled: false
+
+    - task-name: bootstrapSnapshotsBuilderMongoDbContext
+      task-bean: bootstrapSnapshotsBuilderMongoDbContextTask
+      timeout: 5m
+      dependency-tasks: []
+      retry-policy:
+        auto-retry-enabled: false
+
+    - task-name: bootstrapOcsContext
+      task-bean: bootstrapOcsContext
+      timeout: 5m
+      dependency-tasks: []
+      retry-policy:
+        auto-retry-enabled: false
+
+    - task-name: bootstrapYtMockTablesContext
+      task-bean: bootstrapYtMockTablesContextTask
+      timeout: 5m
+      dependency-tasks: []
+      retry-policy:
+        auto-retry-enabled: false
+
+    - task-name: bootstrapOnlineTogglesContext
+      task-bean: bootstrapOnlineTogglesContextTask
+      timeout: 5m
+      dependency-tasks: []
+      retry-policy:
+        auto-retry-enabled: false
+
+    - task-name: bootstrapOfflineTogglesContext
+      task-bean: bootstrapOfflineTogglesContextTask
+      timeout: 5m
+      dependency-tasks: []
+      retry-policy:
+        auto-retry-enabled: false
+
+    - task-name: bootstrapHermesSnapshotCopyContext
+      task-bean: bootstrapHermesSnapshotCopyContextTask
+      timeout: 5m
+      dependency-tasks: []
+      retry-policy:
+        auto-retry-enabled: false

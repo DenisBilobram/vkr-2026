@@ -1,0 +1,87 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '1.9.25'
+    id 'org.jetbrains.kotlin.plugin.spring' version '1.9.25'
+    id 'org.springframework.boot' version '3.4.3'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'java-library'
+}
+
+repositories {
+    mavenCentral()
+}
+
+group = 'ru.vk.recommender.sre'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+sourceSets {
+    main {
+        kotlin.srcDirs = ['src/main/kotlin']
+        resources.srcDirs = ['src/main/resources']
+    }
+    test {
+        kotlin.srcDirs = ['src/test/kotlin']
+        resources.srcDirs = ['src/test/resources']
+    }
+}
+
+configurations.configureEach {
+    exclude group: "org.springframework.boot", module: "spring-boot-starter-logging"
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
+    implementation("org.reactivestreams:reactive-streams")
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1"
+
+    // db
+    implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
+    implementation("org.postgresql:postgresql")
+    implementation("org.flywaydb:flyway-core")
+    implementation("org.flywaydb:flyway-database-postgresql")
+
+    // kotlin
+    implementation 'com.fasterxml.jackson.module:jackson-module-kotlin:2.18.5'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.18.5'
+    implementation 'org.jetbrains.kotlin:kotlin-reflect'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
+
+    // logs
+    implementation 'org.springframework.boot:spring-boot-starter-log4j2'
+    runtimeOnly 'com.lmax:disruptor:3.3.4'
+
+    // test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+    testImplementation 'org.skyscreamer:jsonassert:1.5.1'
+
+    implementation 'com.hubspot.jinjava:jinjava:2.8.3'
+}
+
+
+springBoot {
+    mainClass = 'ru.vk.recommender.sre.discoveryportalflow.DiscoveryPortalFlowApplicationKt'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+tasks.register('export', Copy) {
+    group 'distribution'
+    dependsOn bootJar
+    into "$projectDir/build/export"
+    include '*.jar'
+    from "$projectDir/build/libs"
+    duplicatesStrategy DuplicatesStrategy.FAIL
+}

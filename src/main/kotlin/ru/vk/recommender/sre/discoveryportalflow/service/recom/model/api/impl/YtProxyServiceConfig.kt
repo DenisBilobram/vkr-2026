@@ -1,0 +1,18 @@
+package ru.vk.recommender.sre.discoveryportalflow.service.recom.model.api.impl
+
+import ru.vk.recommender.sre.discoveryportalflow.service.recom.ServiceType
+import ru.vk.recommender.sre.discoveryportalflow.service.recom.model.ScopedServiceConfig
+import ru.vk.recommender.sre.discoveryportalflow.service.recom.model.TenantServiceConfig
+import ru.vk.recommender.sre.discoveryportalflow.service.recom.model.api.RecommenderServiceConfig
+import ru.vk.recommender.sre.discoveryportalflow.service.recom.runtime.ServiceScope
+
+/**
+ * Документация по изменению сервиса:
+ * @see ru.vk.recommender.sre.discoveryportalflow.service.recom.CodeGenDoc
+ */
+data class YtProxyServiceConfig(
+    override val type: ServiceType = ServiceType.YT_PROXY,
+    override val serviceDisabled: Boolean = false,
+    override val tenant: String? = null,
+    override val serviceScope: ServiceScope = ServiceScope.PROJECT_SCOPED,
+) : RecommenderServiceConfig(type, serviceDisabled), ScopedServiceConfig, TenantServiceConfig
