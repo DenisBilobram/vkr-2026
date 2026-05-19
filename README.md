@@ -23,14 +23,3 @@ docker compose up --build
 ```
 
 The default app port is `8080`; management endpoints are exposed on `8081`.
-
-## Flow API
-
-- `GET /flow/definitions/stages`
-- `POST /flow/stage/run`
-- `POST /flow/stage/task/run`
-- `GET /flow/stage/{stageRunId}`
-- `GET /flow/task/{taskRunId}/logs`
-- `POST /flow/task/{taskRunId}/retry`
-
-The publication flow definition is in `src/main/resources/flow-definition.yml`.
